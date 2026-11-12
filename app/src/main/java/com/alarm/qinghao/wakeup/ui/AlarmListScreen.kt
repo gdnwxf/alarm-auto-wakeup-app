@@ -442,12 +442,25 @@ private fun describeCountdown(triggerAt: Long?): String {
     if (triggerAt == null) return "暂无启用的闹钟"
     val remain = triggerAt - System.currentTimeMillis()
     if (remain <= 60_000L) return "即将响铃"
-    val minutes = remain / 60_000L
-    return if (minutes < 60) {
-        "$minutes 分钟后响铃"
-    } else {
-        "${minutes / 60} 小时 ${minutes % 60} 分钟后响铃"
+
+    val totalMinutes = remain / 60_000L
+    if (totalMinutes < 1) return "即将响铃"
+    if (totalMinutes < 60) return "$totalMinutes 分钟后响铃"
+
+    val days = totalMinutes / (24 * 60)
+    val hours = (totalMinutes % (24 * 60)) / 60
+    val minutes = totalMinutes % 60
+
+    if (days < 1) {
+        return if (minutes > 0) "$hours 小时 $minutes 分钟后响铃" else "$hours 小时后响铃"
     }
+
+    val parts = buildList {
+        add("$days 天")
+        if (hours > 0) add("$hours 小时")
+        if (minutes > 0) add("$minutes 分钟")
+    }
+    return parts.joinToString(" ") + "后响铃"
 }
 
 @Composable
