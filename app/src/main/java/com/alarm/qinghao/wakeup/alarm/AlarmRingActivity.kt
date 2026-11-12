@@ -6,6 +6,7 @@ import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
+import android.view.KeyEvent
 import android.view.WindowManager
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -84,6 +85,17 @@ class AlarmRingActivity : ComponentActivity() {
     private fun readIntent(intent: Intent?) {
         alarmId = intent?.getLongExtra(AlarmScheduler.EXTRA_ALARM_ID, -1L) ?: -1L
         snoozeCount = intent?.getIntExtra(AlarmScheduler.EXTRA_SNOOZE_COUNT, 0) ?: 0
+    }
+
+    /** 音量键在响铃期间也作为静音快捷键（电源键走熄屏广播）。 */
+    override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
+        if (keyCode == KeyEvent.KEYCODE_VOLUME_UP || keyCode == KeyEvent.KEYCODE_VOLUME_DOWN) {
+            if (RingingStateHolder.currentOrNull() != null && !RingingStateHolder.muted.value) {
+                AlarmService.sendAction(this, AlarmService.ACTION_MUTE)
+                return true
+            }
+        }
+        return super.onKeyDown(keyCode, event)
     }
 
     private fun applyLockScreenFlags() {

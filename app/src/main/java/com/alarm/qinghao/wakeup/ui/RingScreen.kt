@@ -142,6 +142,15 @@ fun RingScreen(
 
             Spacer(Modifier.height(28.dp))
 
+            if (!isMuted) {
+                Text(
+                    text = "按电源键或音量键可静音",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.White.copy(alpha = 0.45f)
+                )
+                Spacer(Modifier.height(8.dp))
+            }
+
             if (isMuted) {
                 Text(
                     text = "已静音，铃声与震动已停止",

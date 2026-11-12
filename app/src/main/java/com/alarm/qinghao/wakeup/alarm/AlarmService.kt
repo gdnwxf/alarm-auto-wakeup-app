@@ -3,8 +3,10 @@ package com.alarm.qinghao.wakeup.alarm
 import android.app.Notification
 import android.app.PendingIntent
 import android.app.Service
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.Handler
@@ -48,6 +50,18 @@ class AlarmService : Service() {
 
     /** 正在结束响铃：阻止仍在途的加载协程重新开播。 */
     private var stopping = false
+
+    private var screenOffRegistered = false
+
+    /** 响铃期间监听熄屏：用户按电源键关屏即静音（电源键事件不向应用分发）。 */
+    private val screenOffReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action == Intent.ACTION_SCREEN_OFF) {
+                Log.i(TAG, "检测到熄屏（电源键），静音闹钟")
+                mutePlayback()
+            }
+        }
+    }
 
     /** 周期性重新投递有限时长震动波形，进程被杀后自然停止。 */
     private val vibrateLoop = object : Runnable {
@@ -212,6 +226,30 @@ class AlarmService : Service() {
         val wakeLockTimeout = (target.ringTimeoutMinutes.coerceIn(1, 60) + 1) * 60_000L
         wakeLock = powerManager?.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "AlarmWakeup:ringing")
             ?.apply { runCatching { acquire(wakeLockTimeout) } }
+
+        registerScreenOffReceiver()
+    }
+
+    private fun registerScreenOffReceiver() {
+        if (screenOffRegistered) return
+        screenOffRegistered = runCatching {
+            ContextCompat.registerReceiver(
+                this,
+                screenOffReceiver,
+                IntentFilter(Intent.ACTION_SCREEN_OFF),
+                ContextCompat.RECEIVER_NOT_EXPORTED
+            )
+            true
+        }.getOrElse {
+            Log.w(TAG, "注册熄屏监听失败", it)
+            false
+        }
+    }
+
+    private fun unregisterScreenOffReceiver() {
+        if (!screenOffRegistered) return
+        screenOffRegistered = false
+        runCatching { unregisterReceiver(screenOffReceiver) }
     }
 
     private fun scheduleAutoStop(target: AlarmEntity) {
@@ -239,6 +277,7 @@ class AlarmService : Service() {
         wakeLock = null
 
         RingingStateHolder.setMuted(true)
+        unregisterScreenOffReceiver()
         if (!promoteToForeground(buildNotification(current, snoozeCount))) return
         // 依旧保留超时自动结束，避免通知永久驻留
         scheduleAutoStop(current)
@@ -269,6 +308,7 @@ class AlarmService : Service() {
     }
 
     private fun releasePlayback() {
+        unregisterScreenOffReceiver()
         handler.removeCallbacks(vibrateLoop)
         player?.stop()
         player = null
