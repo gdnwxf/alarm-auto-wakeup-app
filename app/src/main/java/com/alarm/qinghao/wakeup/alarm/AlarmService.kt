@@ -111,7 +111,9 @@ class AlarmService : Service() {
         // 同一闹钟、同一贪睡次数的重复回调（如降级为非精确闹钟时的多次触发）不重复播放
         val ringing = alarm
         if (ringing != null && ringing.id == alarmId && snoozeCount == count) {
-            promoteToForeground(buildNotification(ringing, snoozeCount))
+            if (!promoteToForeground(buildNotification(ringing, snoozeCount))) {
+                Log.w(TAG, "刷新响铃通知失败，服务已停止")
+            }
             return
         }
 
@@ -139,7 +141,9 @@ class AlarmService : Service() {
             return
         }
         if (alarm?.id == target.id) {
-            promoteToForeground(buildNotification(target, count))
+            if (!promoteToForeground(buildNotification(target, count))) {
+                Log.w(TAG, "刷新响铃通知失败，服务已停止")
+            }
             return
         }
         // 切换闹钟前先释放旧的播放器/震动/唤醒锁，避免资源叠加

@@ -61,11 +61,15 @@ class MainActivity : ComponentActivity() {
         var exactAlarmOk by remember { mutableStateOf(Permissions.canScheduleExactAlarms(context)) }
         var notificationsOk by remember { mutableStateOf(Permissions.canPostNotifications(context)) }
         var fullScreenOk by remember { mutableStateOf(Permissions.canUseFullScreenIntent(context)) }
+        var batteryOptimizationsOk by remember {
+            mutableStateOf(Permissions.isIgnoringBatteryOptimizations(context))
+        }
 
         LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
             exactAlarmOk = Permissions.canScheduleExactAlarms(context)
             notificationsOk = Permissions.canPostNotifications(context)
             fullScreenOk = Permissions.canUseFullScreenIntent(context)
+            batteryOptimizationsOk = Permissions.isIgnoringBatteryOptimizations(context)
         }
 
         val notificationPermissionLauncher = rememberLauncherForActivityResult(
@@ -139,6 +143,7 @@ class MainActivity : ComponentActivity() {
                 exactAlarmOk = exactAlarmOk,
                 notificationsOk = notificationsOk,
                 fullScreenOk = fullScreenOk,
+                batteryOptimizationsOk = batteryOptimizationsOk,
                 onToggle = { alarm, enabled ->
                     scope.launch {
                         val updated = alarm.copy(enabled = enabled)
@@ -164,7 +169,23 @@ class MainActivity : ComponentActivity() {
                 },
                 onFixExactAlarm = { startSystemIntent(Permissions.exactAlarmSettingsIntent(context)) },
                 onFixNotifications = { startSystemIntent(Permissions.notificationSettingsIntent(context)) },
-                onFixFullScreen = { startSystemIntent(Permissions.fullScreenIntentSettingsIntent(context)) }
+                onFixFullScreen = { startSystemIntent(Permissions.fullScreenIntentSettingsIntent(context)) },
+                onFixBatteryOptimizations = {
+                    val request = Permissions.batteryOptimizationSettingsIntent(context)
+                    runCatching { context.startActivity(request) }
+                        .onFailure {
+                            // 部分 ROM 不支持直接授权页，回退到电池优化列表
+                            runCatching {
+                                context.startActivity(Permissions.batteryOptimizationListIntent())
+                            }.onFailure {
+                                Toast.makeText(
+                                    context,
+                                    "无法打开电池优化设置",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                        }
+                }
             )
         }
     }

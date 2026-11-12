@@ -82,5 +82,5 @@ gradle wrapper --gradle-version 8.7   # 仓库未内置 gradle-wrapper.jar，需
 - 已使用 JDK 17.0.21 + Gradle 8.7 + Android SDK 34 实际编译通过（`assembleDebug` BUILD SUCCESSFUL），产物 `qinghao-alarm-debug.apk` 位于仓库根目录，为 debug 签名，可直接安装到 Android 8.0+ 设备。
 - 尚未在真机上验证响铃、锁屏全屏页、唤起目标应用与国产 ROM 白名单行为。
 - 国产 ROM（MIUI / EMUI / ColorOS 等）需要手动开启「自启动」「锁屏显示」「后台弹出界面」白名单，否则响铃页可能无法自动弹出。
-- `QUERY_ALL_PACKAGES` 属于敏感权限，若上架 Google Play 需在控制台声明用途（闹钟唤醒目标应用）。
+- `QUERY_ALL_PACKAGES` 与 `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` 属于敏感权限，上架 Google Play 需在控制台申报用途（闹钟类应用允许）。
 - 唤醒应用依赖目标应用存在桌面入口（`getLaunchIntentForPackage`），无入口的应用不会被列出。

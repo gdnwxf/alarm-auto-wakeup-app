@@ -8,6 +8,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
+import android.os.PowerManager
 import android.provider.Settings
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
@@ -61,4 +62,26 @@ object Permissions {
         Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
             putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
         }
+
+    /** 是否已在电池优化白名单（普通应用能拿到的最高级别后台豁免）。 */
+    fun isIgnoringBatteryOptimizations(context: Context): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return true
+        val powerManager = context.getSystemService(PowerManager::class.java) ?: return false
+        return powerManager.isIgnoringBatteryOptimizations(context.packageName)
+    }
+
+    /** 电池优化授权页；直接返回，由调用方 startActivity 失败时回退到列表页。 */
+    fun batteryOptimizationSettingsIntent(context: Context): Intent =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            Intent(
+                Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                Uri.parse("package:${context.packageName}")
+            )
+        } else {
+            batteryOptimizationListIntent()
+        }
+
+    /** 电池优化列表页（部分 ROM 不支持直接授权）。 */
+    fun batteryOptimizationListIntent(): Intent =
+        Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
 }

@@ -62,13 +62,24 @@ fun AlarmListScreen(
     exactAlarmOk: Boolean,
     notificationsOk: Boolean,
     fullScreenOk: Boolean,
+    batteryOptimizationsOk: Boolean,
     onToggle: (AlarmEntity, Boolean) -> Unit,
     onEdit: (AlarmEntity) -> Unit,
     onAdd: () -> Unit,
     onFixExactAlarm: () -> Unit,
     onFixNotifications: () -> Unit,
-    onFixFullScreen: () -> Unit
+    onFixFullScreen: () -> Unit,
+    onFixBatteryOptimizations: () -> Unit
 ) {
+    // 列表倒计时共用一个 30 秒心跳，避免每个卡片各起一个协程
+    var refreshTick by remember { mutableLongStateOf(0L) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            kotlinx.coroutines.delay(30_000L)
+            refreshTick++
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(title = { Text("闹钟", fontWeight = FontWeight.SemiBold) })
@@ -125,9 +136,17 @@ fun AlarmListScreen(
                     onAction = onFixFullScreen
                 )
             }
+            if (!batteryOptimizationsOk) {
+                PermissionCard(
+                    title = "建议忽略电池优化",
+                    message = "避免待机时被系统限制响铃与唤醒应用。",
+                    actionText = "去设置",
+                    onAction = onFixBatteryOptimizations
+                )
+            }
 
             // 表盘 + 距下次响铃倒计时（参考主流闹钟布局）
-            ClockHeader(alarms = alarms)
+            ClockHeader(alarms = alarms, tick = refreshTick)
 
             if (alarms.isEmpty()) {
                 EmptyState(modifier = Modifier.weight(1f))
@@ -140,6 +159,7 @@ fun AlarmListScreen(
                     items(items = alarms, key = { it.id }) { alarm ->
                         AlarmCard(
                             alarm = alarm,
+                            tick = refreshTick,
                             onToggle = { enabled -> onToggle(alarm, enabled) },
                             onClick = { onEdit(alarm) }
                         )
@@ -154,21 +174,14 @@ fun AlarmListScreen(
 @Composable
 private fun AlarmCard(
     alarm: AlarmEntity,
+    tick: Long,
     onToggle: (Boolean) -> Unit,
     onClick: () -> Unit
 ) {
     val timeText = String.format("%02d:%02d", alarm.hour, alarm.minute)
     val repeatText = RepeatDays.describe(alarm.repeatMask)
 
-    // 每 30 秒重算一次，避免列表长时间停留时「下次响铃」显示过期日期
-    var minuteTick by remember { mutableLongStateOf(0L) }
-    LaunchedEffect(alarm.id) {
-        while (true) {
-            kotlinx.coroutines.delay(30_000L)
-            minuteTick++
-        }
-    }
-    val nextTriggerText = remember(alarm, minuteTick) {
+    val nextTriggerText = remember(alarm, tick) {
         if (!alarm.enabled) {
             null
         } else {
@@ -243,14 +256,7 @@ private fun AlarmCard(
 }
 
 @Composable
-private fun ClockHeader(alarms: List<AlarmEntity>) {
-    var tick by remember { mutableLongStateOf(0L) }
-    LaunchedEffect(Unit) {
-        while (true) {
-            kotlinx.coroutines.delay(30_000L)
-            tick++
-        }
-    }
+private fun ClockHeader(alarms: List<AlarmEntity>, tick: Long) {
     val countdown = remember(alarms, tick) {
         val now = System.currentTimeMillis()
         val next = alarms.filter { it.enabled }

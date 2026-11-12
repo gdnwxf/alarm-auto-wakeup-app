@@ -47,6 +47,14 @@ fun AnalogClock(modifier: Modifier = Modifier) {
     val tickColor = colors.onSurfaceVariant.copy(alpha = 0.45f)
     val handColor = colors.onSurface
     val secondColor = colors.error
+    val numberLayouts = remember(textMeasurer, numberStyle, colors.onSurface) {
+        (1..12).map { hour ->
+            textMeasurer.measure(
+                text = AnnotatedString(hour.toString()),
+                style = numberStyle.copy(color = colors.onSurface)
+            )
+        }
+    }
 
     Canvas(modifier = modifier) {
         val radius = size.minDimension / 2f
@@ -81,14 +89,11 @@ fun AnalogClock(modifier: Modifier = Modifier) {
             )
         }
 
-        // 1~12 数字
+        // 1~12 数字（布局预计算，避免每秒重复 measure）
         for (hour in 1..12) {
             val angle = Math.toRadians((hour * 30 - 90).toDouble())
             val distance = radius * 0.73f
-            val layout = textMeasurer.measure(
-                text = AnnotatedString(hour.toString()),
-                style = numberStyle.copy(color = colors.onSurface)
-            )
+            val layout = numberLayouts[hour - 1]
             drawText(
                 textLayoutResult = layout,
                 topLeft = Offset(
