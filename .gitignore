@@ -1,0 +1,30 @@
+# Gradle / 构建产物
+.gradle/
+build/
+captures/
+.kotlin/
+local.properties
+
+# IDE
+.idea/
+*.iml
+.navigation/
+.DS_Store
+
+# 安装包与调试产物
+*.apk
+*.aab
+*.ap_
+*.hprof
+
+# 签名密钥（切勿提交）
+*.jks
+*.keystore
+signing.properties
+
+# NDK
+.externalNativeBuild/
+.cxx/
+
+# 本次任务的审计记录，不纳入版本控制
+update-qh-*.md
