@@ -65,12 +65,14 @@ class MainActivity : ComponentActivity() {
         var batteryOptimizationsOk by remember {
             mutableStateOf(Permissions.isIgnoringBatteryOptimizations(context))
         }
+        var overlayOk by remember { mutableStateOf(Permissions.canDrawOverlays(context)) }
 
         LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
             exactAlarmOk = Permissions.canScheduleExactAlarms(context)
             notificationsOk = Permissions.canPostNotifications(context)
             fullScreenOk = Permissions.canUseFullScreenIntent(context)
             batteryOptimizationsOk = Permissions.isIgnoringBatteryOptimizations(context)
+            overlayOk = Permissions.canDrawOverlays(context)
         }
 
         val notificationPermissionLauncher = rememberLauncherForActivityResult(
@@ -150,6 +152,7 @@ class MainActivity : ComponentActivity() {
                 notificationsOk = notificationsOk,
                 fullScreenOk = fullScreenOk,
                 batteryOptimizationsOk = batteryOptimizationsOk,
+                overlayOk = overlayOk,
                 focusAlarmId = focusAlarmId.takeIf { it > 0L },
                 onFocusConsumed = { focusAlarmId = -1L },
                 onDeleteAlarms = { ids ->
@@ -186,6 +189,7 @@ class MainActivity : ComponentActivity() {
                 onFixExactAlarm = { startSystemIntent(Permissions.exactAlarmSettingsIntent(context)) },
                 onFixNotifications = { startSystemIntent(Permissions.notificationSettingsIntent(context)) },
                 onFixFullScreen = { startSystemIntent(Permissions.fullScreenIntentSettingsIntent(context)) },
+                onFixOverlay = { startSystemIntent(Permissions.overlayGuideIntent(context)) },
                 onFixBatteryOptimizations = {
                     val request = Permissions.batteryOptimizationSettingsIntent(context)
                     runCatching { context.startActivity(request) }

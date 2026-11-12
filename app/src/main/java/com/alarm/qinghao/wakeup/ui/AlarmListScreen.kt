@@ -80,6 +80,7 @@ fun AlarmListScreen(
     notificationsOk: Boolean,
     fullScreenOk: Boolean,
     batteryOptimizationsOk: Boolean,
+    overlayOk: Boolean,
     /** 返回列表时要定位到的闹钟 id，null 表示不定位 */
     focusAlarmId: Long?,
     onFocusConsumed: () -> Unit,
@@ -90,7 +91,8 @@ fun AlarmListScreen(
     onFixExactAlarm: () -> Unit,
     onFixNotifications: () -> Unit,
     onFixFullScreen: () -> Unit,
-    onFixBatteryOptimizations: () -> Unit
+    onFixBatteryOptimizations: () -> Unit,
+    onFixOverlay: () -> Unit
 ) {
     // 列表倒计时共用一个 30 秒心跳，避免每个卡片各起一个协程
     var refreshTick by remember { mutableLongStateOf(0L) }
@@ -218,6 +220,14 @@ fun AlarmListScreen(
                     message = "锁屏时可能无法自动弹出响铃页。",
                     actionText = "去开启",
                     onAction = onFixFullScreen
+                )
+            }
+            if (!overlayOk) {
+                PermissionCard(
+                    title = "建议允许后台弹出页面",
+                    message = "亮屏时自动弹出响铃页。华为/荣耀请在「应用启动管理」中允许后台活动与自启动；其他机型可开启「显示在其他应用上层」。",
+                    actionText = "去设置",
+                    onAction = onFixOverlay
                 )
             }
             if (!batteryOptimizationsOk) {

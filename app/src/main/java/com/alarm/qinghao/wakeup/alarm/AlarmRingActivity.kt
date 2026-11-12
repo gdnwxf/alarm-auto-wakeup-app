@@ -185,10 +185,12 @@ class AlarmRingActivity : ComponentActivity() {
             )
         }
 
-        // 响铃稳定后再唤起目标应用，避免与全屏页展示竞争
-        LaunchedEffect(current.alarm.id, current.snoozeCount) {
-            delay(if (hasWakeApps) WAKE_APPS_QUICK_DELAY_MS else WAKE_APPS_DELAY_MS)
-            WakeApps.launchAll(this@AlarmRingActivity, current.alarm) { results ->
+        // 启动逻辑提取为可重试函数：华为等 ROM 会在后台拦截 startActivity
+        // packages 可指定只重试失败的应用，避免把已成功的应用重复弹出
+        fun triggerWakeApps(packages: List<String> = current.alarm.wakeAppPackages) {
+            if (packages.isEmpty()) return
+            val target = current.alarm.copy(wakeAppPackages = packages)
+            WakeApps.launchAll(this@AlarmRingActivity, target) { results ->
                 results.forEach {
                     Log.i(TAG, "唤起 ${it.packageName} 成功=${it.success} 原因=${it.reason}")
                 }
@@ -197,13 +199,30 @@ class AlarmRingActivity : ComponentActivity() {
                     WakeLaunchState.AllOpened
                 } else {
                     WakeLaunchState.Failed(
-                        failed.map { "${it.label}：${it.reason ?: "未知原因"}" }
+                        packages = failed.map { it.packageName },
+                        reasons = failed.map { "${it.label}：${it.reason ?: "未知原因"}" }
                     )
                 }
                 if (failed.isNotEmpty()) {
                     // 用 applicationContext，避免页面已销毁
                     WakeAppsNotifier.notifyFailures(applicationContext, results)
                 }
+            }
+        }
+
+        // 响铃稳定后再唤起目标应用，避免与全屏页展示竞争
+        LaunchedEffect(current.alarm.id, current.snoozeCount) {
+            delay(if (hasWakeApps) WAKE_APPS_QUICK_DELAY_MS else WAKE_APPS_DELAY_MS)
+            triggerWakeApps()
+        }
+
+        // 后台启动被系统拦截时（典型：华为/EMUI），页面回到前台（如点通知进入）后自动重试
+        LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+            val failed = launchState as? WakeLaunchState.Failed
+            if (hasWakeApps && failed != null && failed.packages.isNotEmpty()) {
+                Log.i(TAG, "页面回到前台，重试 ${failed.packages.size} 个失败应用")
+                launchState = WakeLaunchState.Launching
+                triggerWakeApps(failed.packages)
             }
         }
     }
@@ -358,5 +377,8 @@ class AlarmRingActivity : ComponentActivity() {
 private sealed interface WakeLaunchState {
     data object Launching : WakeLaunchState
     data object AllOpened : WakeLaunchState
-    data class Failed(val reasons: List<String>) : WakeLaunchState
+    data class Failed(
+        val packages: List<String>,
+        val reasons: List<String>
+    ) : WakeLaunchState
 }

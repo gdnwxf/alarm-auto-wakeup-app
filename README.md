@@ -77,10 +77,35 @@ gradle wrapper --gradle-version 8.7   # 仓库未内置 gradle-wrapper.jar，需
 | 响铃时长 | 1~60 分钟强制约束，超时自动停止；响铃页时间刷新随 `Lifecycle.RESUMED` 暂停，后台不空转 |
 | 图标内存 | 目标应用图标按 72px 解码为 `ImageBitmap`，离开选择页即随之释放 |
 
+## 兼容性验证
+
+| 设备 / 系统 | 验证项 | 结果 |
+| --- | --- | --- |
+| 华为 ALN-AL00（Mate 60，Android 12 / HarmonyOS 4.x） | 响铃页自动显示、目标应用自动拉起、电源键静音、无崩溃 | ✅ 通过 |
+| 同上：**亮屏 + App 在后台**，未开「后台活动」权限 | 响铃声正常，但 `activity start fail: Background activity start`，页面不弹、不唤起应用 | ❌ 复现并定位 |
+| 同上：开启「后台活动」后亮屏复测 | 响铃页正常显示，`唤起 com.larksuite.suite 成功=true`，Lark 在前台 | ✅ 通过 |
+| 同上（后台启动被拦截场景） | 点通知进入 App 后自动重试未成功的目标应用，且不重复弹出已成功的 | ✅ 逻辑已实现，待更多场景复测 |
+| Android 模拟器（API 28） | 响铃、贪睡、唤醒应用、失败通知、多选删除、50 条列表滚动（Janky 2.01%） | ✅ 通过 |
+| 小米 / OPPO / vivo / 荣耀等 | 后台弹出、自启动限制 | ⏳ 未实测，需按下方白名单设置 |
+
+华为实测日志（2026-11-12）：
+```
+# 未开后台活动权限（亮屏）
+W ActivityTaskManager: activity start fail: Background activity start
+  callingUidProcState: FOREGROUND_SERVICE, allowBackgroundActivityStart: false
+
+# 开启后（亮屏）
+I ActivityTaskManager: Making visible and scheduling visibility: AlarmRingActivity
+I AlarmRingActivity: 唤起 com.larksuite.suite 成功=true
+D HwActivityTaskManagerServiceEx: pkg:com.larksuite.suite visible:true
+```
+
 ## 已知限制
 
 - 已使用 JDK 17.0.21 + Gradle 8.7 + Android SDK 34 实际编译通过（`assembleDebug` BUILD SUCCESSFUL），产物 `qinghao-alarm-debug.apk` 位于仓库根目录，为 debug 签名，可直接安装到 Android 8.0+ 设备。
-- 尚未在真机上验证响铃、锁屏全屏页、唤起目标应用与国产 ROM 白名单行为。
-- 国产 ROM（MIUI / EMUI / ColorOS 等）需要手动开启「自启动」「锁屏显示」「后台弹出界面」白名单，否则响铃页可能无法自动弹出。
+- 已在华为 ALN-AL00（Android 12 / HarmonyOS 4.x）真机验证响铃页、唤醒应用与电源键静音；小米 / OPPO / vivo / 荣耀等未实测。
+- 国产 ROM（MIUI / EMUI / ColorOS 等）建议开启「自启动」「锁屏显示」「后台弹出界面」白名单。华为实测：**不开启「后台活动」时，亮屏且 App 在后台会被拦截**（`allowBackgroundActivityStart: false`），开启后正常。
+- 同一时间可创建多个闹钟（已验证），但同时触发时服务为单实例，仅播放一次铃声/保留一个通知。
 - `QUERY_ALL_PACKAGES` 与 `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` 属于敏感权限，上架 Google Play 需在控制台申报用途（闹钟类应用允许）。
 - 唤醒应用依赖目标应用存在桌面入口（`getLaunchIntentForPackage`），无入口的应用不会被列出。
+- 华为等部分 ROM 移除了 `sqlite3`，调试时无法通过 `run-as sqlite3` 改库，需走 UI 操作。
