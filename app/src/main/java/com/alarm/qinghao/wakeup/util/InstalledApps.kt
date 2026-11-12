@@ -8,6 +8,7 @@ import android.util.Log
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.core.graphics.drawable.toBitmap
+import java.util.concurrent.ConcurrentHashMap
 
 /** 可选择的目标应用 */
 data class LaunchableApp(
@@ -61,18 +62,26 @@ object InstalledApps {
 
     private const val ICON_SIZE = 56
 
-    /** 解析应用显示名，失败时回退包名。 */
-    fun labelOf(context: Context, packageName: String): String = runCatching {
-        val packageManager = context.packageManager
-        val info = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            packageManager.getApplicationInfo(
-                packageName,
-                PackageManager.ApplicationInfoFlags.of(0L)
-            )
-        } else {
-            @Suppress("DEPRECATION")
-            packageManager.getApplicationInfo(packageName, 0)
-        }
-        packageManager.getApplicationLabel(info).toString()
-    }.getOrDefault(packageName)
+    /** 应用显示名缓存，避免列表反复重组时重复查询 PackageManager。 */
+    private val labelCache = ConcurrentHashMap<String, String>()
+
+    /** 解析应用显示名，失败时回退包名；结果进程内缓存。 */
+    fun labelOf(context: Context, packageName: String): String {
+        labelCache[packageName]?.let { return it }
+        val label = runCatching {
+            val packageManager = context.packageManager
+            val info = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                packageManager.getApplicationInfo(
+                    packageName,
+                    PackageManager.ApplicationInfoFlags.of(0L)
+                )
+            } else {
+                @Suppress("DEPRECATION")
+                packageManager.getApplicationInfo(packageName, 0)
+            }
+            packageManager.getApplicationLabel(info).toString()
+        }.getOrDefault(packageName)
+        labelCache[packageName] = label
+        return label
+    }
 }

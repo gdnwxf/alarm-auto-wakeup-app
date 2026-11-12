@@ -5,6 +5,7 @@ import android.media.RingtoneManager
 import android.net.Uri
 import android.util.Log
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -85,6 +86,9 @@ fun AlarmEditRoute(
     onDelete: (Long) -> Unit,
     onBack: () -> Unit
 ) {
+    // 系统返回手势/返回键：回到闹钟列表，而不是退出应用
+    BackHandler { onBack() }
+
     var draft by remember { mutableStateOf<AlarmEntity?>(null) }
 
     LaunchedEffect(alarmId) {

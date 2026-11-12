@@ -1,5 +1,6 @@
 package com.alarm.qinghao.wakeup.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,18 +12,26 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Alarm
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
@@ -38,21 +47,29 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.alarm.qinghao.wakeup.alarm.RingingStateHolder
 import com.alarm.qinghao.wakeup.data.AlarmEntity
 import com.alarm.qinghao.wakeup.data.RepeatDays
+import com.alarm.qinghao.wakeup.util.InstalledApps
+import com.alarm.qinghao.wakeup.util.WakeApps
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun AlarmListScreen(
     alarms: List<AlarmEntity>,
@@ -63,6 +80,10 @@ fun AlarmListScreen(
     notificationsOk: Boolean,
     fullScreenOk: Boolean,
     batteryOptimizationsOk: Boolean,
+    /** 返回列表时要定位到的闹钟 id，null 表示不定位 */
+    focusAlarmId: Long?,
+    onFocusConsumed: () -> Unit,
+    onDeleteAlarms: (List<Long>) -> Unit,
     onToggle: (AlarmEntity, Boolean) -> Unit,
     onEdit: (AlarmEntity) -> Unit,
     onAdd: () -> Unit,
@@ -73,6 +94,20 @@ fun AlarmListScreen(
 ) {
     // 列表倒计时共用一个 30 秒心跳，避免每个卡片各起一个协程
     var refreshTick by remember { mutableLongStateOf(0L) }
+
+    // 多选删除状态
+    var selectionMode by remember { mutableStateOf(false) }
+    val selectedIds = remember { mutableStateListOf<Long>() }
+    var showBatchDeleteConfirm by remember { mutableStateOf(false) }
+
+    fun exitSelectionMode() {
+        selectionMode = false
+        selectedIds.clear()
+    }
+
+    // 多选模式下返回键退出多选，而不是退出应用
+    BackHandler(enabled = selectionMode) { exitSelectionMode() }
+
     LaunchedEffect(Unit) {
         while (true) {
             kotlinx.coroutines.delay(30_000L)
@@ -80,22 +115,71 @@ fun AlarmListScreen(
         }
     }
 
+    // 从编辑页返回时定位到刚编辑/新建的闹钟
+    val listState = rememberLazyListState()
+    LaunchedEffect(focusAlarmId, alarms) {
+        val target = focusAlarmId ?: return@LaunchedEffect
+        val index = alarms.indexOfFirst { it.id == target }
+        if (index >= 0) {
+            listState.scrollToItem(index)
+            onFocusConsumed()
+        }
+    }
+
     Scaffold(
         topBar = {
-            TopAppBar(title = { Text("闹钟", fontWeight = FontWeight.SemiBold) })
+            TopAppBar(
+                title = {
+                    Text(
+                        text = if (selectionMode) "已选 ${selectedIds.size} 项" else "闹钟",
+                        fontWeight = FontWeight.SemiBold
+                    )
+                },
+                navigationIcon = {
+                    if (selectionMode) {
+                        IconButton(onClick = { exitSelectionMode() }) {
+                            Icon(Icons.Filled.Close, contentDescription = "退出多选")
+                        }
+                    }
+                },
+                actions = {
+                    if (selectionMode) {
+                        val allSelected = alarms.isNotEmpty() && selectedIds.size == alarms.size
+                        TextButton(onClick = {
+                            if (allSelected) {
+                                selectedIds.clear()
+                            } else {
+                                selectedIds.clear()
+                                selectedIds.addAll(alarms.map { it.id })
+                            }
+                        }) {
+                            Text(if (allSelected) "取消全选" else "全选")
+                        }
+                        IconButton(
+                            onClick = {
+                                if (selectedIds.isNotEmpty()) showBatchDeleteConfirm = true
+                            }
+                        ) {
+                            Icon(Icons.Filled.DeleteOutline, contentDescription = "删除所选")
+                        }
+                    }
+                }
+            )
         },
         floatingActionButton = {
-            FloatingActionButton(
-                onClick = onAdd,
-                shape = CircleShape,
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.Add,
-                    contentDescription = "新建闹钟",
-                    modifier = Modifier.size(30.dp)
-                )
+            if (!selectionMode) {
+                FloatingActionButton(
+                    onClick = onAdd,
+                    shape = CircleShape,
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Add,
+                        contentDescription = "新建闹钟",
+                        modifier = Modifier.size(30.dp)
+                    )
+                }
             }
         }
     ) { padding ->
@@ -153,6 +237,7 @@ fun AlarmListScreen(
             } else {
                 LazyColumn(
                     modifier = Modifier.weight(1f),
+                    state = listState,
                     contentPadding = PaddingValues(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 96.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
@@ -160,26 +245,82 @@ fun AlarmListScreen(
                         AlarmCard(
                             alarm = alarm,
                             tick = refreshTick,
+                            selectionMode = selectionMode,
+                            selected = selectedIds.contains(alarm.id),
                             onToggle = { enabled -> onToggle(alarm, enabled) },
-                            onClick = { onEdit(alarm) }
+                            onClick = {
+                                if (selectionMode) {
+                                    if (selectedIds.contains(alarm.id)) {
+                                        selectedIds.remove(alarm.id)
+                                    } else {
+                                        selectedIds.add(alarm.id)
+                                    }
+                                } else {
+                                    onEdit(alarm)
+                                }
+                            },
+                            onLongPress = {
+                                if (!selectionMode) {
+                                    selectionMode = true
+                                    selectedIds.clear()
+                                    selectedIds.add(alarm.id)
+                                }
+                            }
                         )
                     }
                 }
             }
         }
     }
+
+    if (showBatchDeleteConfirm) {
+        AlertDialog(
+            onDismissRequest = { showBatchDeleteConfirm = false },
+            title = { Text("删除闹钟") },
+            text = { Text("确定删除选中的 ${selectedIds.size} 个闹钟吗？删除后不可恢复。") },
+            confirmButton = {
+                TextButton(onClick = {
+                    val ids = selectedIds.toList()
+                    showBatchDeleteConfirm = false
+                    exitSelectionMode()
+                    onDeleteAlarms(ids)
+                }) {
+                    Text("删除", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showBatchDeleteConfirm = false }) { Text("取消") }
+            }
+        )
+    }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 private fun AlarmCard(
     alarm: AlarmEntity,
     tick: Long,
+    selectionMode: Boolean,
+    selected: Boolean,
     onToggle: (Boolean) -> Unit,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onLongPress: () -> Unit
 ) {
     val timeText = String.format("%02d:%02d", alarm.hour, alarm.minute)
     val repeatText = RepeatDays.describe(alarm.repeatMask)
+    val context = LocalContext.current
+
+    // 直接展开唤醒应用的名称（最多 5 个），而不是只显示数量
+    val wakeAppLabels by produceState(
+        initialValue = null as List<String>?,
+        alarm.wakeAppPackages
+    ) {
+        value = withContext(Dispatchers.IO) {
+            alarm.wakeAppPackages
+                .take(WakeApps.MAX_TARGETS)
+                .map { InstalledApps.labelOf(context, it) }
+        }
+    }
 
     val nextTriggerText = remember(alarm, tick) {
         if (!alarm.enabled) {
@@ -195,15 +336,16 @@ private fun AlarmCard(
         if (nextTriggerText != null) add(nextTriggerText)
     }.joinToString(" · ")
 
-    val cardColor = if (isSystemInDarkTheme()) {
-        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
-    } else {
-        Color.White
+    val cardColor = when {
+        selectionMode && selected -> MaterialTheme.colorScheme.primaryContainer
+        isSystemInDarkTheme() -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
+        else -> Color.White
     }
 
     Card(
-        onClick = onClick,
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .combinedClickable(onClick = onClick, onLongClick = onLongPress),
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = cardColor)
     ) {
@@ -211,6 +353,10 @@ private fun AlarmCard(
             modifier = Modifier.padding(horizontal = 18.dp, vertical = 16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            if (selectionMode) {
+                Checkbox(checked = selected, onCheckedChange = null)
+                Spacer(Modifier.size(10.dp))
+            }
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = timeText,
@@ -231,6 +377,7 @@ private fun AlarmCard(
                     )
                 }
                 if (alarm.wakeAppPackages.isNotEmpty()) {
+                    val labels = wakeAppLabels
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -243,14 +390,23 @@ private fun AlarmCard(
                             modifier = Modifier.size(14.dp)
                         )
                         Text(
-                            text = "唤醒 ${alarm.wakeAppPackages.size} 个应用",
+                            // 始终占一行，避免标签加载完成前后卡片高度跳动
+                            text = when {
+                                labels == null -> "唤醒 加载中…"
+                                labels.isEmpty() -> "唤醒 未选择应用"
+                                else -> "唤醒 ${labels.joinToString("、")}"
+                            },
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.primary
+                            color = MaterialTheme.colorScheme.primary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
                 }
             }
-            Switch(checked = alarm.enabled, onCheckedChange = onToggle)
+            if (!selectionMode) {
+                Switch(checked = alarm.enabled, onCheckedChange = onToggle)
+            }
         }
     }
 }

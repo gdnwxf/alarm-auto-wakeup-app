@@ -57,6 +57,7 @@ class MainActivity : ComponentActivity() {
 
         var route by rememberSaveable { mutableStateOf(ROUTE_LIST) }
         var editingId by rememberSaveable { mutableStateOf(0L) }
+        var focusAlarmId by rememberSaveable { mutableStateOf(-1L) }
 
         var exactAlarmOk by remember { mutableStateOf(Permissions.canScheduleExactAlarms(context)) }
         var notificationsOk by remember { mutableStateOf(Permissions.canPostNotifications(context)) }
@@ -106,6 +107,7 @@ class MainActivity : ComponentActivity() {
                             normalized
                         }
                         app.scheduler.schedule(saved)
+                        focusAlarmId = saved.id
                         route = ROUTE_LIST
                     }
                 },
@@ -113,10 +115,14 @@ class MainActivity : ComponentActivity() {
                     scope.launch {
                         app.scheduler.cancel(id)
                         app.repository.delete(id)
+                        focusAlarmId = -1L
                         route = ROUTE_LIST
                     }
                 },
-                onBack = { route = ROUTE_LIST }
+                onBack = {
+                    focusAlarmId = editingId.takeIf { it > 0L } ?: -1L
+                    route = ROUTE_LIST
+                }
             )
 
             else -> AlarmListScreen(
@@ -144,6 +150,16 @@ class MainActivity : ComponentActivity() {
                 notificationsOk = notificationsOk,
                 fullScreenOk = fullScreenOk,
                 batteryOptimizationsOk = batteryOptimizationsOk,
+                focusAlarmId = focusAlarmId.takeIf { it > 0L },
+                onFocusConsumed = { focusAlarmId = -1L },
+                onDeleteAlarms = { ids ->
+                    scope.launch {
+                        ids.forEach { id ->
+                            app.scheduler.cancel(id)
+                            app.repository.delete(id)
+                        }
+                    }
+                },
                 onToggle = { alarm, enabled ->
                     scope.launch {
                         val updated = alarm.copy(enabled = enabled)
